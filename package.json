@@ -1,0 +1,13 @@
+{
+  "name": "atbim-skills",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Skills de atbim para Claude",
+  "scripts": {
+    "sync:brand": "node scripts/sync-brand.mjs",
+    "zip:skills": "node scripts/sync-brand.mjs && node scripts/zip-skills.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
