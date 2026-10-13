@@ -1,30 +1,43 @@
 /**
  * Generador de REF (Requisitos Técnicos Funcionales) — plantilla atbim
  * ----------------------------------------------------------------------
- * Cómo usarlo:
- *   1. Copia este archivo a /home/claude/generate_ref.js (o el nombre que quieras)
- *   2. Rellena el objeto DATA más abajo con la info del proyecto concreto
- *   3. node generate_ref.js
- *   4. Verifica el resultado (ver sección "Verificar" en SKILL.md)
+ * Cómo usarlo (ejecútalo desde su sitio, no lo copies: así encuentra la marca):
  *
- * No hace falta tocar nada por debajo de la línea "NO TOCAR DE AQUÍ PARA ABAJO"
- * salvo que se quiera ajustar el diseño.
+ *   NODE_PATH=$(npm root -g) node <dir-de-la-skill>/scripts/generate_ref.js datos.json REF_Cliente.docx
+ *
+ *   datos.json -> datos del proyecto, con el mismo formato que DATA_EJEMPLO (más abajo).
+ *                 Sin argumentos genera el ejemplo.
+ *   salida     -> ruta del .docx (por defecto REF.docx en la carpeta actual).
+ *
+ * Marca: usa la librería de la skill atbim-brand si está instalada (junto a esta skill o en
+ * $ATBIM_BRAND_DIR); si no, la copia local scripts/atbim_brand.js, que es idéntica.
  */
 
-const {
-  Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow,
-  TableCell, WidthType, BorderStyle, ShadingType, AlignmentType, ImageRun,
-  Header, Footer, PageNumber, TextWrappingType, HorizontalPositionAlign,
-  VerticalPositionAlign, HorizontalPositionRelativeFrom, VerticalPositionRelativeFrom,
-  PageBreak, convertInchesToTwip,
-} = require("docx");
 const fs = require("fs");
 const path = require("path");
+const { Paragraph, convertInchesToTwip } = require("docx");
+
+const BRAND_LOCAL = path.join(__dirname, "atbim_brand.js");
+const BRAND_LIB = [
+  process.env.ATBIM_BRAND_DIR && path.join(process.env.ATBIM_BRAND_DIR, "scripts", "atbim_brand.js"),
+  path.join(__dirname, "..", "..", "atbim-brand", "scripts", "atbim_brand.js"),
+  BRAND_LOCAL,
+].find((f) => f && fs.existsSync(f));
+const B = require(BRAND_LIB);
 
 // ======================================================================
-// DATA — esto es lo único que cambia en cada proyecto/cliente
+// DATOS — formato del JSON de entrada (este es el ejemplo que se genera sin argumentos)
 // ======================================================================
-const DATA = {
+
+const NOTA_BORRADOR =
+  "Este documento debe considerarse como una primera versión o borrador funcional, por lo " +
+  "que los requisitos aquí definidos pueden estar sujetos a modificaciones, ajustes o " +
+  "ampliaciones durante las fases de análisis, diseño e implementación, en función de las " +
+  "necesidades del proyecto y de las decisiones técnicas que se adopten. El objetivo de " +
+  "este documento es servir como base inicial de referencia para la iteración y definición " +
+  "final de las funcionalidades del sistema.";
+
+const DATA_EJEMPLO = {
   cliente: "Alcampo",
   proyecto: "Alcampo Cloud Platform – Implementación del sistema de gestión de solicitudes en el módulo Master.",
   fecha: "14/08/2026",
@@ -41,16 +54,11 @@ const DATA = {
     "añadiendo una nueva pestaña llamada 'Solicitudes' dentro del módulo Master. Esta " +
     "sección centralizará todas las solicitudes enviadas por las tiendas y usuarios.",
 
-  notaBorrador:
-    "Este documento debe considerarse como una primera versión o borrador funcional, por lo " +
-    "que los requisitos aquí definidos pueden estar sujetos a modificaciones, ajustes o " +
-    "ampliaciones durante las fases de análisis, diseño e implementación, en función de las " +
-    "necesidades del proyecto y de las decisiones técnicas que se adopten. El objetivo de " +
-    "este documento es servir como base inicial de referencia para la iteración y definición " +
-    "final de las funcionalidades del sistema.",
+  // Opcional: si no viene, se usa NOTA_BORRADOR.
+  notaBorrador: NOTA_BORRADOR,
 
-  // Cada bloque RF-XX con sus sub-requisitos (acepta anidación en texto, no en objeto,
-  // para mantenerlo simple: usa el prefijo ya escrito, p.ej "RF-02.3.1")
+  // Cada bloque RF-XX con sus sub-requisitos (la anidación va en el prefijo del texto,
+  // p.ej. "RF-02.3.1", no en el objeto).
   requisitos: [
     {
       titulo: "RF-01: Estructura del módulo de solicitudes (desde módulo Master)",
@@ -71,264 +79,99 @@ const DATA = {
 
   // Tabla de horas — una fila por cada bloque RF-XX de nivel superior definido arriba en
   // "requisitos" (NO tareas técnicas genéricas tipo backend/frontend/QA).
-  // El TOTAL se calcula solo, no lo edites a mano.
+  // El TOTAL se calcula solo.
   tareas: [
     { tarea: "RF-01: Estructura del módulo de solicitudes", horas: 8 },
     { tarea: "RF-02: Gestión de solicitudes generales", horas: 14 },
   ],
+
+  // Opcional: secciones adicionales tras la estimación de horas (riesgos, fuera de alcance,
+  // condiciones comerciales...). Se numeran a partir del 6.
+  seccionesExtra: [],
 };
 
 // ======================================================================
-// NO TOCAR DE AQUÍ PARA ABAJO (salvo ajustes de diseño)
+// DOCUMENTO
 // ======================================================================
 
-const COLOR_TITULOS = "181525";
-const COLOR_GRIS_TEXTO = "3A3A3A";
-const FUENTE = "Calibri";
-const BACKGROUND_IMG = "/mnt/skills/user/ref-generator/assets/background-a4.png";
+const [entrada, salida = "REF.docx"] = process.argv.slice(2);
+const DATA = entrada
+  ? JSON.parse(fs.readFileSync(entrada, "utf8").replace(/^﻿/, ""))
+  : DATA_EJEMPLO;
 
-// A4 en twips
-const PAGE_WIDTH = 11906;
-const PAGE_HEIGHT = 16838;
-
-function backgroundImageRun() {
-  const imgBuffer = fs.readFileSync(BACKGROUND_IMG);
-  return new ImageRun({
-    data: imgBuffer,
-    type: "png",
-    transformation: { width: 794, height: 1123 }, // A4 completo a 96dpi (210x297mm)
-    floating: {
-      horizontalPosition: {
-        relative: HorizontalPositionRelativeFrom.PAGE,
-        align: HorizontalPositionAlign.CENTER,
-      },
-      verticalPosition: {
-        relative: VerticalPositionRelativeFrom.PAGE,
-        align: VerticalPositionAlign.CENTER,
-      },
-      wrap: { type: TextWrappingType.NONE },
-      behindDocument: true,
-    },
-  });
-}
-
-function heading(text, level = HeadingLevel.HEADING_1) {
-  return new Paragraph({
-    heading: level,
-    spacing: { before: 300, after: 150 },
-    children: [
-      new TextRun({
-        text,
-        bold: true,
-        color: COLOR_TITULOS,
-        font: FUENTE,
-        size: level === HeadingLevel.HEADING_1 ? 30 : 24,
-      }),
-    ],
-  });
-}
-
-function bodyText(text, opts = {}) {
-  return new Paragraph({
-    spacing: { after: 160 },
-    children: [
-      new TextRun({
-        text,
-        font: FUENTE,
-        size: 22,
-        color: COLOR_GRIS_TEXTO,
-        italics: !!opts.italics,
-      }),
-    ],
-  });
+const OBLIGATORIOS = ["cliente", "proyecto", "fecha", "autor", "problemaActual", "solucionPropuesta", "requisitos", "tareas"];
+const faltan = OBLIGATORIOS.filter((k) => DATA[k] == null);
+if (faltan.length) {
+  console.error(`Faltan campos en ${entrada}: ${faltan.join(", ")}`);
+  process.exit(1);
 }
 
 function requisitoItem(text) {
   return new Paragraph({
     spacing: { after: 90 },
     indent: { left: convertInchesToTwip(0.15) },
-    children: [
-      new TextRun({ text, font: FUENTE, size: 21, color: COLOR_GRIS_TEXTO }),
-    ],
-  });
-}
-
-function buildHeader() {
-  return new Header({
-    children: [new Paragraph({ children: [] })],
-  });
-}
-
-function buildFooter() {
-  return new Footer({
-    children: [
-      new Paragraph({
-        alignment: AlignmentType.CENTER,
-        children: [
-          new TextRun({ text: "Página ", font: FUENTE, size: 16, color: "808080" }),
-          new TextRun({ children: [PageNumber.CURRENT], font: FUENTE, size: 16, color: "808080" }),
-          new TextRun({ text: " de ", font: FUENTE, size: 16, color: "808080" }),
-          new TextRun({ children: [PageNumber.TOTAL_PAGES], font: FUENTE, size: 16, color: "808080" }),
-        ],
-      }),
-    ],
-  });
-}
-
-function buildPortada() {
-  return [
-    new Paragraph({ children: [backgroundImageRun()] }),
-    new Paragraph({ spacing: { before: 3000 }, children: [] }),
-    new Paragraph({
-      alignment: AlignmentType.LEFT,
-      children: [
-        new TextRun({
-          text: "REF – Requisitos Técnicos Funcionales",
-          bold: true,
-          color: COLOR_TITULOS,
-          font: FUENTE,
-          size: 40,
-        }),
-      ],
-    }),
-    new Paragraph({
-      spacing: { before: 150 },
-      children: [
-        new TextRun({ text: DATA.cliente, bold: true, color: COLOR_TITULOS, font: FUENTE, size: 28 }),
-      ],
-    }),
-    new Paragraph({
-      spacing: { before: 400 },
-      children: [
-        new TextRun({ text: `Fecha: ${DATA.fecha}`, font: FUENTE, size: 20, color: COLOR_GRIS_TEXTO }),
-      ],
-    }),
-    new Paragraph({
-      children: [
-        new TextRun({ text: `Elaborado por: ${DATA.autor}`, font: FUENTE, size: 20, color: COLOR_GRIS_TEXTO }),
-      ],
-    }),
-    new Paragraph({ children: [new PageBreak()] }),
-  ];
-}
-
-function buildHorasTable() {
-  const totalHoras = DATA.tareas.reduce((sum, t) => sum + t.horas, 0);
-
-  const headerRow = new TableRow({
-    tableHeader: true,
-    children: [
-      new TableCell({
-        width: { size: 8000, type: WidthType.DXA },
-        shading: { type: ShadingType.CLEAR, fill: COLOR_TITULOS },
-        children: [new Paragraph({ children: [new TextRun({ text: "Bloque de Requisitos (RF)", bold: true, color: "FFFFFF", font: FUENTE, size: 20 })] })],
-      }),
-      new TableCell({
-        width: { size: 2000, type: WidthType.DXA },
-        shading: { type: ShadingType.CLEAR, fill: COLOR_TITULOS },
-        children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: "Horas", bold: true, color: "FFFFFF", font: FUENTE, size: 20 })] })],
-      }),
-    ],
-  });
-
-  const rows = DATA.tareas.map((t, i) => new TableRow({
-    children: [
-      new TableCell({
-        width: { size: 8000, type: WidthType.DXA },
-        shading: { type: ShadingType.CLEAR, fill: i % 2 === 0 ? "FFFFFF" : "F2F2F2" },
-        children: [new Paragraph({ children: [new TextRun({ text: t.tarea, font: FUENTE, size: 20, color: COLOR_GRIS_TEXTO })] })],
-      }),
-      new TableCell({
-        width: { size: 2000, type: WidthType.DXA },
-        shading: { type: ShadingType.CLEAR, fill: i % 2 === 0 ? "FFFFFF" : "F2F2F2" },
-        children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: String(t.horas), font: FUENTE, size: 20, color: COLOR_GRIS_TEXTO })] })],
-      }),
-    ],
-  }));
-
-  const totalRow = new TableRow({
-    children: [
-      new TableCell({
-        width: { size: 8000, type: WidthType.DXA },
-        shading: { type: ShadingType.CLEAR, fill: "D9D9D9" },
-        children: [new Paragraph({ children: [new TextRun({ text: "TOTAL ESTIMADO", bold: true, font: FUENTE, size: 20, color: COLOR_TITULOS })] })],
-      }),
-      new TableCell({
-        width: { size: 2000, type: WidthType.DXA },
-        shading: { type: ShadingType.CLEAR, fill: "D9D9D9" },
-        children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `${totalHoras} h`, bold: true, font: FUENTE, size: 20, color: COLOR_TITULOS })] })],
-      }),
-    ],
-  });
-
-  return new Table({
-    width: { size: 10000, type: WidthType.DXA },
-    columnWidths: [8000, 2000],
-    rows: [headerRow, ...rows, totalRow],
-    borders: {
-      top: { style: BorderStyle.SINGLE, size: 2, color: "CCCCCC" },
-      bottom: { style: BorderStyle.SINGLE, size: 2, color: "CCCCCC" },
-      left: { style: BorderStyle.SINGLE, size: 2, color: "CCCCCC" },
-      right: { style: BorderStyle.SINGLE, size: 2, color: "CCCCCC" },
-      insideHorizontal: { style: BorderStyle.SINGLE, size: 2, color: "E0E0E0" },
-      insideVertical: { style: BorderStyle.SINGLE, size: 2, color: "E0E0E0" },
-    },
+    children: [B.run(text, { size: 21 })],
   });
 }
 
 function buildBody() {
-  const children = [];
+  const totalHoras = DATA.tareas.reduce((sum, t) => sum + Number(t.horas), 0);
 
-  children.push(heading("1. Proyecto / Módulo"));
-  children.push(bodyText(DATA.proyecto));
-
-  children.push(heading("2. Problema actual"));
-  children.push(bodyText(DATA.problemaActual));
-
-  children.push(heading("3. Solución propuesta"));
-  children.push(bodyText(DATA.solucionPropuesta));
-
-  children.push(heading("4. Requisitos Funcionales"));
-  children.push(bodyText(DATA.notaBorrador, { italics: true }));
+  const children = [
+    B.h1("1. Proyecto / Módulo"),
+    B.p(DATA.proyecto),
+    B.h1("2. Problema actual"),
+    B.p(DATA.problemaActual),
+    B.h1("3. Solución propuesta"),
+    B.p(DATA.solucionPropuesta),
+    B.h1("4. Requisitos Funcionales"),
+    B.p(DATA.notaBorrador || NOTA_BORRADOR, { italics: true }),
+  ];
 
   DATA.requisitos.forEach((bloque) => {
-    children.push(heading(bloque.titulo, HeadingLevel.HEADING_2));
-    bloque.items.forEach((item) => children.push(requisitoItem(item)));
+    children.push(B.h2(bloque.titulo), ...bloque.items.map(requisitoItem));
   });
 
-  children.push(new Paragraph({ children: [new PageBreak()] }));
-  children.push(heading("5. Estimación de horas"));
-  children.push(bodyText(
-    "La siguiente tabla recoge la estimación de horas por cada bloque de requisitos " +
-    "funcionales (RF) necesario para su desarrollo. Esta estimación es orientativa y puede " +
-    "ajustarse durante la fase de análisis detallado."
-  ));
-  children.push(buildHorasTable());
+  children.push(
+    B.pageBreak(),
+    B.h1("5. Estimación de horas"),
+    B.p(
+      "La siguiente tabla recoge la estimación de horas por cada bloque de requisitos " +
+      "funcionales (RF) necesario para su desarrollo. Esta estimación es orientativa y puede " +
+      "ajustarse durante la fase de análisis detallado."
+    ),
+    B.table({
+      columns: ["Bloque de Requisitos (RF)", "Horas"],
+      widths: [80, 20],
+      rows: DATA.tareas.map((t) => [t.tarea, t.horas]),
+      total: ["TOTAL ESTIMADO", `${totalHoras} h`],
+    }),
+  );
+
+  (DATA.seccionesExtra || []).forEach((s, i) => {
+    children.push(
+      B.h1(`${6 + i}. ${s.titulo}`),
+      ...(s.parrafos || []).map((t) => B.p(t)),
+      ...B.bullets(s.items || []),
+    );
+  });
 
   return children;
 }
 
 async function main() {
-  const doc = new Document({
-    sections: [
-      {
-        properties: {
-          page: {
-            size: { width: PAGE_WIDTH, height: PAGE_HEIGHT },
-            margin: { top: 1000, bottom: 1000, left: 1000, right: 1000 },
-          },
-        },
-        headers: { default: buildHeader() },
-        footers: { default: buildFooter() },
-        children: [...buildPortada(), ...buildBody()],
-      },
-    ],
+  console.log(`Marca: ${BRAND_LIB === BRAND_LOCAL ? "copia local de ref-generator" : "skill atbim-brand"} (${BRAND_LIB})`);
+  const doc = B.buildDocument({
+    cover: {
+      title: "REF – Requisitos Técnicos Funcionales",
+      client: DATA.cliente,
+      date: DATA.fecha,
+      author: DATA.autor,
+    },
+    title: `REF – ${DATA.cliente}`,
+    children: buildBody(),
   });
-
-  const buffer = await Packer.toBuffer(doc);
-  const outPath = path.join(__dirname, "..", "..", "..", "..", "home", "claude", "REF.docx");
-  fs.writeFileSync("REF.docx", buffer);
-  console.log("Generado: REF.docx");
+  await B.save(doc, salida);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
