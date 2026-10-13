@@ -60,33 +60,49 @@ Pregunta con selector:
 tipo "backend/frontend/QA". Pregunta las horas bloque a bloque (con texto libre, las horas no
 se prestan bien a selector) y el total se calcula solo, no lo sumes a mano.
 
-Ejemplo de cómo debe quedar `DATA.tareas` en el script:
-```js
-tareas: [
-  { tarea: "RF-01: Estructura del módulo de solicitudes", horas: 8 },
-  { tarea: "RF-02: Gestión de solicitudes generales", horas: 14 },
-  { tarea: "RF-03: Detalle de solicitud general", horas: 10 },
+Ejemplo de cómo debe quedar `tareas` en el JSON de datos:
+```json
+"tareas": [
+  { "tarea": "RF-01: Estructura del módulo de solicitudes", "horas": 8 },
+  { "tarea": "RF-02: Gestión de solicitudes generales", "horas": 14 },
+  { "tarea": "RF-03: Detalle de solicitud general", "horas": 10 }
 ]
 ```
 
 ### Después de tener todo
-5. **Copia el script plantilla** a un sitio editable:
-   ```bash
-   cp /mnt/skills/user/ref-generator/scripts/generate_ref.js /home/claude/generate_ref.js
+1. **Escribe los datos en un JSON** (p.ej. `/home/claude/ref.json`) con todo lo recopilado en los
+   pasos 1-8. El formato completo está en `DATA_EJEMPLO` dentro de `scripts/generate_ref.js`:
+   ```json
+   {
+     "cliente": "Alcampo",
+     "proyecto": "Alcampo Cloud Platform – Sistema de gestión de solicitudes en el módulo Master.",
+     "fecha": "14/08/2026",
+     "autor": "atbim – Building Engineering",
+     "problemaActual": "…",
+     "solucionPropuesta": "…",
+     "requisitos": [
+       { "titulo": "RF-01: Estructura del módulo", "items": ["RF-01.1: …", "RF-01.2: …"] }
+     ],
+     "tareas": [{ "tarea": "RF-01: Estructura del módulo", "horas": 8 }],
+     "seccionesExtra": [{ "titulo": "Fuera de alcance", "parrafos": ["…"], "items": ["…"] }]
+   }
    ```
-6. **Edita el objeto `DATA`** con todo lo recopilado en los pasos 1-8.
-7. **Genera el documento**:
+   `notaBorrador` (si no viene, se usa la nota estándar) y `seccionesExtra` son opcionales.
+2. **Genera el documento** ejecutando el script desde la carpeta de esta skill (la que contiene
+   este SKILL.md, p.ej. `/mnt/skills/user/ref-generator`). No lo copies: así encuentra la marca.
    ```bash
-   cd /home/claude && node generate_ref.js
+   cd /home/claude && NODE_PATH=$(npm root -g) node <dir-de-esta-skill>/scripts/generate_ref.js ref.json REF_Alcampo_Solicitudes.docx
    ```
-8. **Verifica visualmente** antes de entregar (obligatorio):
+   Si falta el paquete `docx`: `npm install -g docx`. La primera línea de la salida indica qué
+   marca se ha usado (skill `atbim-brand` o copia local).
+3. **Verifica visualmente** antes de entregar (obligatorio):
    ```bash
-   python /mnt/skills/public/docx/scripts/office/soffice.py --headless --convert-to pdf REF.docx
-   pdftoppm -jpeg -r 100 REF.pdf page
+   python /mnt/skills/public/docx/scripts/office/soffice.py --headless --convert-to pdf REF_Alcampo_Solicitudes.docx
+   pdftoppm -jpeg -r 100 REF_Alcampo_Solicitudes.pdf page
    ```
    Revisa con `view` al menos la portada y la página de la tabla de horas.
-9. **Renombra** el archivo de forma descriptiva (p.ej. `REF_Alcampo_Solicitudes.docx`), cópialo a
-   `/mnt/user-data/outputs/` y compártelo con `present_files`.
+4. **Entrega**: el nombre del archivo debe ser descriptivo (p.ej. `REF_Alcampo_Solicitudes.docx`).
+   Cópialo a `/mnt/user-data/outputs/` y compártelo con `present_files`.
 
 ## Estructura del documento (fija, no la cambies sin pedirlo el usuario)
 
@@ -99,12 +115,30 @@ tareas: [
 
 ## Identidad visual
 
-- Color de títulos y cabeceras de tabla: `#181525` (definido como `COLOR_TITULOS` en el script).
-- Marca de agua / fondo de portada: `/mnt/skills/user/ref-generator/assets/background-a4.png`
-  (incluye el logo de atbim ya integrado — no añadas el logo por duplicado).
-- Fuente: Calibri en todo el documento.
-- El fondo de marca solo se coloca en la portada (detrás del texto). El resto de páginas van sin
-  cabecera de texto, solo con el número de página en el pie, para un diseño limpio.
+Esta skill no define la marca: el documento se monta con la librería de `atbim-brand`.
+
+1. **Si la skill `atbim-brand` está instalada** (aparece en tus skills disponibles), lee su
+   `SKILL.md` y sigue sus reglas: mandan sobre las de aquí. `generate_ref.js` usa su librería
+   automáticamente si está en una carpeta hermana de esta skill; si está en otra ruta, indícala con
+   `ATBIM_BRAND_DIR=<dir-de-atbim-brand>` delante del comando.
+2. **Si no está**, el script usa la copia local que lleva esta skill (`scripts/atbim_brand.js` y
+   `assets/`) y se aplican estas reglas, copia idéntica de las de `atbim-brand`:
+
+<!-- atbim-brand:reglas:inicio -->
+| Elemento | Valor |
+|---|---|
+| Color principal (títulos, cabeceras de tabla, viñetas) | `#181525` |
+| Texto de cuerpo | `#3A3A3A`, Calibri 11 pt |
+| Gris suave (filas alternas, tarjetas, notas) | `#F1F1F0` (el gris de los triángulos) |
+| Rojo / verde | `#B42318` / `#1B7F3B`, **solo** para caídas/alertas y subidas/mejoras |
+| Fuente | Calibri en todo el documento |
+| Marca de agua | Fondo de marca a página completa en **todas** las páginas (va en la cabecera del documento). No añadas el logo otra vez. |
+| Portada | Primera página, sin pie. |
+| Páginas interiores | Pie «atbim – Building Engineering · Página X de Y». Margen superior amplio para no pisar el logo. |
+
+No inventes colores, fuentes ni logos nuevos. Si el usuario pide otro estilo puntual, aplícalo
+solo a ese documento y no toques la librería.
+<!-- atbim-brand:reglas:fin -->
 
 ## Notas y límites importantes
 
@@ -113,11 +147,10 @@ tareas: [
   el total NO se recalculará solo. Si en algún momento se necesita un total que el propio cliente
   pueda recalcular editando cifras, hay que generar un Excel aparte (no lo hace esta skill).
 - Si el usuario pide **añadir más secciones** (p.ej. riesgos, fuera de alcance, condiciones
-  comerciales), añádelas como nuevos bloques `heading()` + `bodyText()` siguiendo el mismo patrón,
-  manteniendo el color y la fuente.
-- Si cambia el logo o la marca de agua, sustituye el archivo en `assets/background-a4.png`
-  manteniendo proporción A4 (2480×3508 px o equivalente) para que el `transformation` de
-  794×1123 (96dpi) siga cubriendo la página completa sin deformarse.
+  comerciales), añádelas en `seccionesExtra` del JSON (título + párrafos y/o viñetas). Van después
+  de la estimación de horas y se numeran a partir del 6.
+- La marca (fondo, logo, colores, fuente) no se cambia aquí, sino en la skill `atbim-brand`.
+  `scripts/atbim_brand.js` y `assets/` de esta skill son una copia sincronizada: no los edites a mano.
 - Los bloques de requisitos NO usan numeración automática de Word: los prefijos `RF-XX.Y` van
   escritos literalmente en el texto, igual que en el documento de referencia del cliente. Mantén
   esa convención para que el cliente pueda referenciar requisitos concretos en las conversaciones.
